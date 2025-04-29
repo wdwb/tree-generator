@@ -109,7 +109,49 @@ func init() {
 		},
 	}
 
-	rootCmd.AddCommand(applyCmd, createCmd, listCmd)
+	showCmd := &cobra.Command{
+		Use:   "show",
+		Short: "저장된 템플릿의 구조를 트리 형태로 출력합니다",
+		Run: func(cmd *cobra.Command, args []string) {
+			name, _ := cmd.Flags().GetString("name")
+			if name == "" {
+				fmt.Println("템플릿 이름을 -n 또는 --name 플래그로 지정하세요.")
+				return
+			}
+			tmpl, err := templateManager.Load(name)
+			if err != nil {
+				fmt.Printf("템플릿을 불러올 수 없습니다: %v\n", err)
+				return
+			}
+			fmt.Printf("%s (%s)\n", tmpl.Name, tmpl.Description)
+			printTree(tmpl.Structure, "", true)
+		},
+	}
+	showCmd.Flags().StringP("name", "n", "", "확인할 템플릿 이름")
+
+	rootCmd.AddCommand(applyCmd, createCmd, listCmd, showCmd)
+}
+
+func printTree(nodes []templates.TemplateNode, prefix string, last bool) {
+	for i, node := range nodes {
+		isLast := i == len(nodes)-1
+		var branch string
+		if last {
+			branch = "└── "
+		} else {
+			branch = "├── "
+		}
+		fmt.Printf("%s%s%s\n", prefix, branch, node.Name)
+		if node.Type == "dir" && len(node.Children) > 0 {
+			nextPrefix := prefix
+			if isLast {
+				nextPrefix += "    "
+			} else {
+				nextPrefix += "│   "
+			}
+			printTree(node.Children, nextPrefix, isLast)
+		}
+	}
 }
 
 func main() {
