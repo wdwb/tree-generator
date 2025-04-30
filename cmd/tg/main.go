@@ -270,7 +270,44 @@ func init() {
 		},
 	}
 
-	rootCmd.AddCommand(applyCmd, createCmd, listCmd, showCmd, useCmd)
+	// clone 명령어 추가
+	cloneCmd := &cobra.Command{
+		Use:   "clone <template_name>",
+		Short: "지정된 경로의 디렉토리 구조를 새 템플릿으로 저장합니다",
+		Args:  cobra.ExactArgs(1), // 템플릿 이름을 인자로 받음
+		Run: func(cmd *cobra.Command, args []string) {
+			templateName := args[0]
+			path, _ := cmd.Flags().GetString("path")
+
+			fmt.Printf("'%s' 경로의 구조를 스캔하여 '%s' 템플릿으로 저장합니다...\n", path, templateName)
+
+			// 1. 경로 스캔
+			structure, err := templates.ScanDirectory(path)
+			if err != nil {
+				fmt.Printf("경로 스캔 중 오류 발생: %v\n", err)
+				return
+			}
+
+			// 2. Template 구조체 생성
+			template := templates.Template{
+				Name:        templateName,
+				Description: "",  // 설명은 비워둠
+				Variables:   nil, // 변수는 없음
+				Structure:   structure,
+			}
+
+			// 3. 템플릿 저장
+			if err := templateManager.Save(template); err != nil {
+				fmt.Printf("템플릿 저장 중 오류 발생: %v\n", err)
+				return
+			}
+
+			fmt.Printf("템플릿 '%s'가 성공적으로 저장되었습니다.\n", templateName)
+		},
+	}
+	cloneCmd.Flags().StringP("path", "p", ".", "클론할 경로")
+
+	rootCmd.AddCommand(applyCmd, createCmd, listCmd, showCmd, useCmd, cloneCmd)
 }
 
 func printTree(nodes []templates.TemplateNode, prefix string) {

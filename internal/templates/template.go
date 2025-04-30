@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -152,6 +153,50 @@ func (m *FileTemplateManager) applyNode(node TemplateNode, basePath string, vari
 	}
 
 	return nil
+}
+
+// ScanDirectory는 지정된 경로를 재귀적으로 스캔하여 TemplateNode 슬라이스를 반환합니다.
+// .git 디렉토리와 .DS_Store 파일은 무시합니다.
+func ScanDirectory(targetPath string) ([]TemplateNode, error) {
+	entries, err := os.ReadDir(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("디렉토리를 읽을 수 없습니다 '%s': %w", targetPath, err)
+	}
+
+	var nodes []TemplateNode
+	ignoredNames := map[string]bool{".git": true, ".DS_Store": true}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if ignoredNames[name] {
+			continue // 무시 목록에 있으면 건너뜀
+		}
+
+		fullPath := filepath.Join(targetPath, name)
+		node := TemplateNode{Name: name}
+
+		if entry.IsDir() {
+			node.Type = "dir"
+			children, err := ScanDirectory(fullPath) // 재귀 호출
+			if err != nil {
+				return nil, err // 하위 디렉토리 스캔 오류 시 중단
+			}
+			node.Children = children
+		} else {
+			node.Type = "file"
+		}
+		nodes = append(nodes, node)
+	}
+
+	// 파일/디렉토리 정렬 (이름 순, 디렉토리 우선)
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if nodes[i].Type != nodes[j].Type {
+			return nodes[i].Type == "dir"
+		}
+		return nodes[i].Name < nodes[j].Name
+	})
+
+	return nodes, nil
 }
 
 // SaveTemplate은 템플릿을 파일로 저장합니다
