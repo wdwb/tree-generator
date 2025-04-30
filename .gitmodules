@@ -1,0 +1,3 @@
+[submodule "homebrew-tree-generator"]
+	path = homebrew-tree-generator
+	url = https://github.com/wdwb/homebrew-tree-generator.git
