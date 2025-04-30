@@ -109,15 +109,19 @@ func applyTemplate(templateName string, targetPath string) error {
 func init() {
 	// apply 명령어
 	applyCmd := &cobra.Command{
-		Use:   "apply",
+		Use:   "apply [template_name]",
 		Short: "저장된 템플릿을 적용하여 폴더 구조 생성",
+		Args:  cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			name, _ := cmd.Flags().GetString("name")
+			var templateName string
 			path, _ := cmd.Flags().GetString("path")
 
-			// -n 플래그가 제공되지 않았는지 확인
-			if !cmd.Flags().Changed("name") {
-				// 설정 파일에서 기본 템플릿 로드
+			if len(args) == 1 {
+				// 인자가 있으면 해당 이름 사용
+				templateName = args[0]
+				// TODO: 인자로 받은 템플릿 이름이 실제 존재하는지 확인하는 로직 추가하면 더 좋음
+			} else {
+				// 인자가 없으면 설정 파일에서 기본 템플릿 로드
 				config, err := loadConfig()
 				if err != nil {
 					fmt.Printf("설정 로드 오류: %v\n", err)
@@ -125,20 +129,19 @@ func init() {
 				}
 				if config.DefaultTemplate == "" {
 					fmt.Println("적용할 템플릿이 지정되지 않았습니다.")
-					fmt.Printf("사용법: %s apply -n <template_name> 또는 %s use <template_name>으로 기본값 설정\n", os.Args[0], os.Args[0])
+					fmt.Printf("사용법: %s apply <template_name> 또는 %s use <template_name>으로 기본값 설정\n", os.Args[0], os.Args[0])
 					return
 				}
-				name = config.DefaultTemplate // 기본 템플릿 사용
-				fmt.Printf("기본 템플릿 '%s'를 사용합니다.\n", name)
+				templateName = config.DefaultTemplate // 기본 템플릿 사용
+				fmt.Printf("기본 템플릿 '%s'를 사용합니다.\n", templateName)
 			}
 
-			if err := applyTemplate(name, path); err != nil {
+			if err := applyTemplate(templateName, path); err != nil {
 				fmt.Printf("%v\n", err)
 				return
 			}
 		},
 	}
-	applyCmd.Flags().StringP("name", "n", "", "템플릿 이름")
 	applyCmd.Flags().StringP("path", "p", ".", "적용할 경로")
 
 	// create 명령어
@@ -291,11 +294,18 @@ func init() {
 			path := args[0]
 			templateName := args[1]
 			description := args[2]
+			maxDepth, _ := cmd.Flags().GetInt("depth") // depth 플래그 값 읽기
 
-			fmt.Printf("'%s' 경로의 구조를 스캔하여 '%s' 템플릿으로 저장합니다 (설명: %s)...\n", path, templateName, description)
+			fmt.Printf("'%s' 경로의 구조를 최대 깊이 %d까지 스캔하여 '%s' 템플릿으로 저장합니다 (설명: %s)...\n", path, maxDepth, templateName, description)
+			if maxDepth == 0 {
+				fmt.Printf("'%s' 경로의 구조를 스캔하여 '%s' 템플릿으로 저장합니다 (설명: %s)...\n", path, templateName, description)
+			} else {
+				fmt.Printf("'%s' 경로의 구조를 최대 깊이 %d까지 스캔하여 '%s' 템플릿으로 저장합니다 (설명: %s)...\n", path, maxDepth, templateName, description)
+			}
 
-			// 1. 경로 스캔
-			structure, err := templates.ScanDirectory(path)
+			// 1. 경로 스캔 (depth 정보 전달 필요)
+			// structure, err := templates.ScanDirectory(path)
+			structure, err := templates.ScanDirectoryRecursive(path, 0, maxDepth) // 수정된 함수 호출 (가칭)
 			if err != nil {
 				fmt.Printf("경로 스캔 중 오류 발생: %v\n", err)
 				return
@@ -318,6 +328,7 @@ func init() {
 			fmt.Printf("템플릿 '%s'가 성공적으로 저장되었습니다.\n", templateName)
 		},
 	}
+	cloneCmd.Flags().IntP("depth", "d", 0, "스캔할 최대 디렉토리 깊이 (0은 무제한)") // depth 플래그 추가
 
 	// remove 명령어 추가
 	removeCmd := &cobra.Command{

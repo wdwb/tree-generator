@@ -155,9 +155,15 @@ func (m *FileTemplateManager) applyNode(node TemplateNode, basePath string, vari
 	return nil
 }
 
-// ScanDirectory는 지정된 경로를 재귀적으로 스캔하여 TemplateNode 슬라이스를 반환합니다.
+// ScanDirectoryRecursive는 지정된 경로를 재귀적으로 스캔하여 TemplateNode 슬라이스를 반환합니다.
+// maxDepth가 0이 아니면 해당 깊이까지만 스캔합니다.
 // .git 디렉토리와 .DS_Store 파일은 무시합니다.
-func ScanDirectory(targetPath string) ([]TemplateNode, error) {
+func ScanDirectoryRecursive(targetPath string, currentDepth int, maxDepth int) ([]TemplateNode, error) {
+	// 최대 깊이 도달 시 빈 슬라이스 반환 (에러 아님)
+	if maxDepth > 0 && currentDepth >= maxDepth {
+		return []TemplateNode{}, nil
+	}
+
 	entries, err := os.ReadDir(targetPath)
 	if err != nil {
 		return nil, fmt.Errorf("디렉토리를 읽을 수 없습니다 '%s': %w", targetPath, err)
@@ -177,7 +183,8 @@ func ScanDirectory(targetPath string) ([]TemplateNode, error) {
 
 		if entry.IsDir() {
 			node.Type = "dir"
-			children, err := ScanDirectory(fullPath) // 재귀 호출
+			// 다음 깊이로 재귀 호출
+			children, err := ScanDirectoryRecursive(fullPath, currentDepth+1, maxDepth)
 			if err != nil {
 				return nil, err // 하위 디렉토리 스캔 오류 시 중단
 			}
