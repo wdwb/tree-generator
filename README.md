@@ -15,7 +15,7 @@ CLI 환경에서 폴더/파일 구조 템플릿을 쉽게 생성하고 적용할
 ### Homebrew (macOS 및 Linux)
 
 ```bash
-brew tap <YourGitHubUsername>/tree-generator
+brew tap wdwb/tree-generator
 brew install tg
 ```
 
