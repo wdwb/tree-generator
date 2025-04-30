@@ -9,8 +9,13 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/wdwb/tree-generator/internal/templates"
 )
+
+// Styles
+var selectedItemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("35")) // Green
+var defaultInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray
 
 type simpleState int
 
@@ -243,6 +248,111 @@ func renderTreePreview(nodes []templates.TemplateNode, prefix string) string {
 	}
 	return sb.String()
 }
+
+// --- Template Selection TUI ---
+
+type selectModel struct {
+	templates      []templates.Template
+	cursor         int
+	selected       string
+	quitting       bool
+	currentDefault string // 현재 기본 템플릿 이름 저장
+}
+
+func initialSelectModel(templates []templates.Template, currentDefault string) selectModel {
+	return selectModel{
+		templates:      templates,
+		currentDefault: currentDefault, // 전달받은 기본값 저장
+	}
+}
+
+func (m selectModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "enter":
+			if len(m.templates) > 0 && m.cursor >= 0 && m.cursor < len(m.templates) {
+				m.selected = m.templates[m.cursor].Name
+			}
+			m.quitting = true
+			return m, tea.Quit
+
+		case "down", "j":
+			if m.cursor < len(m.templates)-1 {
+				m.cursor++
+			}
+
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func (m selectModel) View() string {
+	if m.quitting {
+		if m.selected != "" {
+			return fmt.Sprintf("\n선택된 템플릿: %s\n", m.selected)
+		}
+		return "\n템플릿 선택이 취소되었습니다.\n"
+	}
+
+	s := "어떤 템플릿을 기본으로 설정하시겠습니까?\n\n"
+
+	for i, t := range m.templates {
+		cursor := " "
+		defaultIndicator := ""
+		if t.Name == m.currentDefault {
+			defaultIndicator = defaultInfoStyle.Render(" (default)")
+		}
+		line := fmt.Sprintf("[%s] (%s)%s", t.Name, t.Description, defaultIndicator)
+		if m.cursor == i {
+			cursor = ">"
+			line = selectedItemStyle.Render(line)
+		}
+		s += fmt.Sprintf("%s %s\n", cursor, line)
+	}
+
+	s += "\n(↑/k: 위, ↓/j: 아래, Enter: 선택, q/Esc: 종료)\n"
+
+	return s
+}
+
+// SelectTemplateTUI starts the TUI for selecting a template.
+// It returns the selected template name or an empty string if canceled.
+func SelectTemplateTUI(tmplList []templates.Template, currentDefault string) (string, error) {
+	if len(tmplList) == 0 {
+		return "", fmt.Errorf("선택할 템플릿이 없습니다")
+	}
+
+	m := initialSelectModel(tmplList, currentDefault) // 현재 기본값 전달
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+	if err != nil {
+		return "", fmt.Errorf("TUI 실행 중 오류 발생: %w", err)
+	}
+
+	// Type assertion to get the final model state
+	finalSelectModel, ok := finalModel.(selectModel)
+	if !ok {
+		return "", fmt.Errorf("최종 모델 타입 변환 실패")
+	}
+
+	return finalSelectModel.selected, nil // Return the selected name
+}
+
+// --- Existing TUI Code ---
 
 func StartTUI() error {
 	m := initialSimpleModel()
