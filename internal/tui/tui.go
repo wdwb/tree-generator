@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -365,10 +366,33 @@ func StartTUI() error {
 		tmpl := &templates.Template{
 			Name:        sm.name,
 			Description: sm.desc,
-			Variables:   nil,
+			Variables:   extractVariables(sm.items),
 			Structure:   buildTree(sm.items),
 		}
 		return templates.SaveTemplate(tmpl)
 	}
 	return nil
+}
+
+// extractVariables는 경로 목록에서 {변수명} 형식의 변수를 추출합니다.
+func extractVariables(paths []string) []string {
+	varRegex := regexp.MustCompile(`\{([^{}]+)\}`)
+	varsMap := make(map[string]bool)
+
+	for _, path := range paths {
+		matches := varRegex.FindAllStringSubmatch(path, -1)
+		for _, match := range matches {
+			if len(match) > 1 {
+				varsMap[match[1]] = true
+			}
+		}
+	}
+
+	// 맵의 키(변수명)를 슬라이스로 변환
+	vars := make([]string, 0, len(varsMap))
+	for k := range varsMap {
+		vars = append(vars, k)
+	}
+	sort.Strings(vars) // 변수명을 알파벳 순으로 정렬
+	return vars
 }

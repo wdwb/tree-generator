@@ -121,7 +121,7 @@ func (m *FileTemplateManager) applyNode(node TemplateNode, basePath string, vari
 	// 변수 치환
 	name := node.Name
 	for k, v := range variables {
-		name = strings.ReplaceAll(name, "${"+k+"}", v)
+		name = strings.ReplaceAll(name, "{"+k+"}", v)
 	}
 
 	path := filepath.Join(basePath, name)
