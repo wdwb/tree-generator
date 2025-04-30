@@ -15,8 +15,10 @@ import (
 )
 
 // Styles
-var selectedItemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("35")) // Green
-var defaultInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray
+var selectedItemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("35"))                           // Green
+var defaultInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))                           // Gray
+var selectedForDeleteStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Strikethrough(true) // Red, Strikethrough
+var cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))                                // Orange cursor
 
 type simpleState int
 
@@ -287,13 +289,16 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "down", "j":
-			if m.cursor < len(m.templates)-1 {
-				m.cursor++
+			if len(m.templates) > 0 {
+				m.cursor = (m.cursor + 1) % len(m.templates)
 			}
 
 		case "up", "k":
-			if m.cursor > 0 {
+			if len(m.templates) > 0 {
 				m.cursor--
+				if m.cursor < 0 {
+					m.cursor = len(m.templates) - 1
+				}
 			}
 		}
 	}
@@ -351,6 +356,133 @@ func SelectTemplateTUI(tmplList []templates.Template, currentDefault string) (st
 	}
 
 	return finalSelectModel.selected, nil // Return the selected name
+}
+
+// --- Template Deletion TUI ---
+
+type deleteModel struct {
+	templates []templates.Template
+	cursor    int
+	selected  map[int]bool // Map to track selected indices
+	quitting  bool
+}
+
+func initialDeleteModel(templates []templates.Template) deleteModel {
+	return deleteModel{
+		templates: templates,
+		selected:  make(map[int]bool),
+	}
+}
+
+func (m deleteModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m deleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.selected = make(map[int]bool) // Clear selection on quit
+			m.quitting = true
+			return m, tea.Quit
+
+		case "enter":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "up", "k":
+			if len(m.templates) > 0 {
+				m.cursor--
+				if m.cursor < 0 {
+					m.cursor = len(m.templates) - 1
+				}
+			}
+
+		case "down", "j":
+			if len(m.templates) > 0 {
+				m.cursor = (m.cursor + 1) % len(m.templates)
+			}
+
+		case " ": // Spacebar to toggle selection
+			if len(m.templates) > 0 {
+				_, ok := m.selected[m.cursor]
+				if ok {
+					delete(m.selected, m.cursor) // Deselect
+				} else {
+					m.selected[m.cursor] = true // Select
+				}
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m deleteModel) View() string {
+	if m.quitting {
+		if len(m.selected) > 0 {
+			var names []string
+			for idx := range m.selected {
+				names = append(names, m.templates[idx].Name)
+			}
+			return fmt.Sprintf("\n삭제 예정: %v\n", names)
+		}
+		return "\n삭제가 취소되었습니다.\n"
+	}
+
+	s := "삭제할 템플릿을 선택하세요 (Space: 선택/해제, Enter: 확정)\n\n"
+
+	for i, t := range m.templates {
+		cursor := " "
+		if m.cursor == i {
+			cursor = cursorStyle.Render(">")
+		}
+
+		checked := "[ ]"
+		lineStyle := lipgloss.NewStyle() // Default style
+		if m.selected[i] {
+			checked = selectedForDeleteStyle.Render("[x]")
+			lineStyle = selectedForDeleteStyle
+		}
+
+		s += fmt.Sprintf("%s %s %s\n", cursor, checked, lineStyle.Render(fmt.Sprintf("%s (%s)", t.Name, t.Description)))
+	}
+
+	s += "\n(↑/k, ↓/j: 이동, Space: 선택/해제, Enter: 확정, q/Esc: 취소)\n"
+	return s
+}
+
+// SelectTemplatesToDeleteTUI starts the TUI for selecting templates to delete.
+// It returns a slice of template names selected for deletion.
+func SelectTemplatesToDeleteTUI(tmplList []templates.Template) ([]string, error) {
+	if len(tmplList) == 0 {
+		return nil, fmt.Errorf("삭제할 템플릿이 없습니다")
+	}
+
+	m := initialDeleteModel(tmplList)
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, fmt.Errorf("TUI 실행 중 오류 발생: %w", err)
+	}
+
+	finalDeleteModel, ok := finalModel.(deleteModel)
+	if !ok {
+		return nil, fmt.Errorf("최종 모델 타입 변환 실패")
+	}
+
+	var selectedNames []string
+	if !finalDeleteModel.quitting || len(finalDeleteModel.selected) == 0 {
+		// User quit without pressing Enter or selected nothing
+		return nil, nil // Return empty list, no error
+	}
+
+	// Collect names based on selected indices
+	for idx := range finalDeleteModel.selected {
+		selectedNames = append(selectedNames, finalDeleteModel.templates[idx].Name)
+	}
+	sort.Strings(selectedNames) // Sort for predictable order
+	return selectedNames, nil
 }
 
 // --- Existing TUI Code ---

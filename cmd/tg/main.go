@@ -307,7 +307,69 @@ func init() {
 	}
 	cloneCmd.Flags().StringP("path", "p", ".", "클론할 경로")
 
-	rootCmd.AddCommand(applyCmd, createCmd, listCmd, showCmd, useCmd, cloneCmd)
+	// remove 명령어 추가
+	removeCmd := &cobra.Command{
+		Use:   "remove [template_name...]",
+		Short: "저장된 템플릿을 삭제합니다",
+		Long:  "인자 없이 실행하면 TUI를 통해 삭제할 템플릿을 선택할 수 있습니다.",
+		Run: func(cmd *cobra.Command, args []string) {
+			var templatesToDelete []string
+
+			if len(args) > 0 {
+				// 인자가 있으면 해당 템플릿들을 삭제 목록에 추가
+				templatesToDelete = args
+			} else {
+				// 인자가 없으면 TUI 실행
+				templatesList, err := templateManager.List()
+				if err != nil {
+					fmt.Printf("템플릿 목록을 가져올 수 없습니다: %v\n", err)
+					return
+				}
+				if len(templatesList) == 0 {
+					fmt.Println("삭제할 템플릿이 없습니다.")
+					return
+				}
+
+				// TUI를 호출하여 삭제할 템플릿 목록을 받음
+				templatesToDelete, err = tui.SelectTemplatesToDeleteTUI(templatesList)
+				if err != nil {
+					fmt.Printf("TUI 실행 중 오류가 발생했습니다: %v\n", err)
+					return
+				}
+			}
+
+			if len(templatesToDelete) == 0 {
+				fmt.Println("삭제할 템플릿이 선택되지 않았습니다.")
+				return
+			}
+
+			fmt.Printf("다음 템플릿을 삭제하시겠습니까? %v\n", templatesToDelete)
+			fmt.Print("진행하려면 'yes'를 입력하세요: ")
+			var confirm string
+			fmt.Scanln(&confirm)
+
+			if confirm != "yes" {
+				fmt.Println("삭제가 취소되었습니다.")
+				return
+			}
+
+			// 선택된 템플릿 삭제
+			deletedCount := 0
+			failedCount := 0
+			for _, name := range templatesToDelete {
+				if err := templateManager.Delete(name); err != nil {
+					fmt.Printf("템플릿 '%s' 삭제 실패: %v\n", name, err)
+					failedCount++
+				} else {
+					fmt.Printf("템플릿 '%s' 삭제 완료\n", name)
+					deletedCount++
+				}
+			}
+			fmt.Printf("총 %d개 템플릿 삭제 완료, %d개 실패\n", deletedCount, failedCount)
+		},
+	}
+
+	rootCmd.AddCommand(applyCmd, createCmd, listCmd, showCmd, useCmd, cloneCmd, removeCmd)
 }
 
 func printTree(nodes []templates.TemplateNode, prefix string) {
