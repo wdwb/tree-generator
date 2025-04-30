@@ -153,41 +153,53 @@ func init() {
 		},
 	}
 
-	// list 명령어
 	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "저장된 템플릿 목록 보기",
-		Run: func(cmd *cobra.Command, args []string) {
-			templates, err := templateManager.List()
-			if err != nil {
-				fmt.Printf("템플릿 목록을 가져올 수 없습니다: %v\n", err)
-				return
-			}
-
-			if len(templates) == 0 {
-				fmt.Println("저장된 템플릿이 없습니다.")
-				return
-			}
-
-			fmt.Println("저장된 템플릿 목록:")
-			for _, t := range templates {
-				fmt.Printf("- %s: %s\n", t.Name, t.Description)
-			}
-		},
-	}
-
-	showCmd := &cobra.Command{
-		Use:   "show",
+		Use:   "list [template_name]",
 		Short: "저장된 템플릿의 구조를 트리 형태로 출력합니다",
+		Args:  cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			name, _ := cmd.Flags().GetString("name")
-			if name == "" {
-				fmt.Println("템플릿 이름을 -n 또는 --name 플래그로 지정하세요.")
-				return
+			var selectedTemplateName string
+			var err error
+
+			if len(args) == 1 {
+				// 인자가 있으면 해당 이름 사용
+				selectedTemplateName = args[0]
+			} else {
+				// 인자가 없으면 TUI 실행
+				templatesList, err := templateManager.List()
+				if err != nil {
+					fmt.Printf("템플릿 목록을 가져올 수 없습니다: %v\n", err)
+					return
+				}
+				if len(templatesList) == 0 {
+					fmt.Println("저장된 템플릿이 없습니다.")
+					return
+				}
+
+				// 현재 기본값 로드 (TUI 표시용)
+				currentConfig, err := loadConfig()
+				if err != nil {
+					fmt.Printf("경고: 설정을 로드하는 중 오류 발생: %v\n", err)
+					currentConfig = &Config{} // 빈 설정으로 진행
+				}
+
+				selectedTemplateName, err = tui.SelectTemplateTUI(templatesList, currentConfig.DefaultTemplate) // TUI 호출
+				if err != nil {
+					fmt.Printf("TUI 실행 중 오류가 발생했습니다: %v\n", err)
+					return
+				}
+				if selectedTemplateName == "" { // 사용자가 TUI에서 취소한 경우
+					// 메시지는 TUI에서 출력하므로 바로 종료
+					return
+				}
 			}
-			tmpl, err := templateManager.Load(name)
+
+			// 선택된 템플릿 로드 및 출력
+			tmpl, err := templateManager.Load(selectedTemplateName)
 			if err != nil {
-				fmt.Printf("템플릿을 불러올 수 없습니다: %v\n", err)
+				// TUI나 인자에서 검증된 이름이므로 Load 실패는 예상치 못한 오류
+				// 다만, TUI 실행과 Load 사이에 파일이 삭제된 경우 발생 가능
+				fmt.Printf("템플릿 '%s'를 불러올 수 없습니다: %v\n", selectedTemplateName, err)
 				return
 			}
 			fmt.Printf("Template: %s (%s)\n", tmpl.Name, tmpl.Description)
@@ -195,7 +207,6 @@ func init() {
 			printTree(tmpl.Structure, "")
 		},
 	}
-	showCmd.Flags().StringP("name", "n", "", "확인할 템플릿 이름")
 
 	// use 명령어 추가
 	useCmd := &cobra.Command{
@@ -272,14 +283,16 @@ func init() {
 
 	// clone 명령어 추가
 	cloneCmd := &cobra.Command{
-		Use:   "clone <template_name>",
-		Short: "지정된 경로의 디렉토리 구조를 새 템플릿으로 저장합니다",
-		Args:  cobra.ExactArgs(1), // 템플릿 이름을 인자로 받음
+		Use:   "clone <path> <template_name> <description>",
+		Short: "지정된 경로의 디렉토리 구조를 스캔하여 새 템플릿으로 저장합니다",
+		Args:  cobra.ExactArgs(3),
 		Run: func(cmd *cobra.Command, args []string) {
-			templateName := args[0]
-			path, _ := cmd.Flags().GetString("path")
+			// 인자 파싱
+			path := args[0]
+			templateName := args[1]
+			description := args[2]
 
-			fmt.Printf("'%s' 경로의 구조를 스캔하여 '%s' 템플릿으로 저장합니다...\n", path, templateName)
+			fmt.Printf("'%s' 경로의 구조를 스캔하여 '%s' 템플릿으로 저장합니다 (설명: %s)...\n", path, templateName, description)
 
 			// 1. 경로 스캔
 			structure, err := templates.ScanDirectory(path)
@@ -291,8 +304,8 @@ func init() {
 			// 2. Template 구조체 생성
 			template := templates.Template{
 				Name:        templateName,
-				Description: "",  // 설명은 비워둠
-				Variables:   nil, // 변수는 없음
+				Description: description,
+				Variables:   nil,
 				Structure:   structure,
 			}
 
@@ -305,7 +318,6 @@ func init() {
 			fmt.Printf("템플릿 '%s'가 성공적으로 저장되었습니다.\n", templateName)
 		},
 	}
-	cloneCmd.Flags().StringP("path", "p", ".", "클론할 경로")
 
 	// remove 명령어 추가
 	removeCmd := &cobra.Command{
@@ -369,7 +381,7 @@ func init() {
 		},
 	}
 
-	rootCmd.AddCommand(applyCmd, createCmd, listCmd, showCmd, useCmd, cloneCmd, removeCmd)
+	rootCmd.AddCommand(applyCmd, createCmd, listCmd, useCmd, cloneCmd, removeCmd)
 }
 
 func printTree(nodes []templates.TemplateNode, prefix string) {
