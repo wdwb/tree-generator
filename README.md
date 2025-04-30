@@ -12,12 +12,11 @@ CLI 환경에서 폴더/파일 구조 템플릿을 쉽게 생성하고 적용할
 
 ## 설치
 
-```bash
-# 프로젝트 루트 디렉토리에서 빌드
-go build -o tg cmd/tg/main.go
+### Homebrew (macOS 및 Linux)
 
-# (선택사항) PATH에 포함된 디렉토리로 바이너리 이동 (예: /usr/local/bin)
-# sudo mv tg /usr/local/bin/
+```bash
+brew tap <YourGitHubUsername>/tree-generator
+brew install tg
 ```
 
 ## 사용법
